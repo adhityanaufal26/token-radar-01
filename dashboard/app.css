@@ -1,4 +1,4 @@
-/* Token Radar v2: dark radar-room theme. One palette, one radius set, two families. */
+/* Token Radar v3: dark radar-room theme. One palette, one radius set, two families. */
 :root {
   --bg: #0a0e13;
   --panel: #111927;
@@ -55,6 +55,9 @@ a { color: var(--accent); }
 .card .sub { color: var(--muted); font-size: 12px; }
 .spot-head { display: flex; align-items: baseline; justify-content: space-between; padding-bottom: var(--s3); }
 .spot-head span { color: var(--muted); font-size: 13px; }
+.heat .card { border-top: 2px solid var(--teal); }
+.heat .rank { color: var(--teal); }
+.why { font-size: 14px; }
 
 .controls { display: flex; flex-wrap: wrap; align-items: end; gap: var(--s3); padding: var(--s4) 0; border-top: 1px solid var(--border); }
 .field { display: grid; gap: var(--s1); }

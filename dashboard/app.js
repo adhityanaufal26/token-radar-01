@@ -1,6 +1,7 @@
-// Token Radar v2 dashboard. Reads window.RADAR (written beside dashboard/ by main.ts)
-// and renders the ranked board, a filterable table, a per-protocol detail drawer with the
-// model's own inputs and the protocol's farm plan. No network: every byte it shows is in data.js.
+// Token Radar v3 dashboard. Reads window.RADAR (written beside dashboard/ by main.ts)
+// and renders the ranked board, a heating-up strip, a filterable table, a per-protocol
+// detail drawer with the model's own inputs, its why-this-rank line and the protocol's
+// farm plan. No network: every byte it shows is in data.js.
 (function () {
   'use strict';
 
@@ -27,14 +28,19 @@
   }
   // The model in one function: the page recomputes a row from the snapshot figures and checks
   // the number board.json carries, so the page's code and the board's data are visibly the same
-  // arithmetic. implied = tvl x category_ratio x growthMult x maturityMult x breadthMult.
+  // arithmetic. implied = tvl x category_ratio x growthMult x maturityMult x momentumMult x breadthMult.
+  // momentumMult = 1 + 0.25 x clamp((growth - category_median_growth) / 100, -0.40, 1.00):
+  // growth against the live median of the row's own category, not growth alone.
   function impliedOf(row, model) {
     var growth = Math.min(model.growth_cap, Math.max(model.growth_floor, row.change_7d === null || row.change_7d === undefined ? 0 : row.change_7d));
     var growthMult = 1 + (growth / 100) * model.growth_weight;
     var age = row.age_days === null || row.age_days === undefined ? model.unknown_age_days : row.age_days;
     var maturity = model.maturity_floor + model.maturity_range * (1 - Math.exp(-Math.max(age, 0) / model.maturity_tau_days));
+    var median = row.category_median_growth === null || row.category_median_growth === undefined ? 0 : row.category_median_growth;
+    var gap = Math.min(model.momentum_cap, Math.max(model.momentum_floor, (growth - median) / 100));
+    var momentum = 1 + gap * model.momentum_weight;
     var breadth = 1 + model.breadth_step * Math.min(Math.max((row.chains || []).length - 1, 0), model.breadth_max_extra_chains);
-    return Math.max(1, Math.round(row.tvl_usd * row.category_ratio * growthMult * maturity * breadth));
+    return Math.max(1, Math.round(row.tvl_usd * row.category_ratio * growthMult * maturity * momentum * breadth));
   }
   function capitalFor(row) {
     if (row.tvl_usd >= 1e9) return 250;
@@ -171,6 +177,23 @@
     );
   }
 
+  function heating() {
+    var hot = DATA.heating || [];
+    if (!hot.length) return null;
+    return el('section', null,
+      el('div', { class: 'spot-head' }, el('h2', { text: 'Heating up — gaining on their own category' }), el('span', { text: 'Growth against the live median of each protocol\u2019s own category, not growth alone' })),
+      el('div', { class: 'spot heat' }, hot.map(function (h) {
+        return el('div', { class: 'card', tabindex: '0', role: 'button', onclick: function () { openDetail(h.slug); }, onkeydown: function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDetail(h.slug); } } },
+          el('span', { class: 'rank', text: 'Board #' + h.rank }),
+          el('b', { text: h.name }),
+          el('span', { class: 'val', text: fmtUsd(h.implied_value_usd) }),
+          el('span', { class: 'sub', text: (h.category || 'Other') + ' · momentum x' + h.momentum_multiplier.toFixed(3) }),
+          el('span', { class: 'sub ' + (h.growth_pct >= h.category_median_growth ? 'pos' : 'neg'), text: '7d ' + fmtPct(h.growth_pct) + ' vs category ' + fmtPct(h.category_median_growth) })
+        );
+      }))
+    );
+  }
+
   function controls() {
     var categories = Array.from(new Set(DATA.rows.map(function (r) { return r.category || 'Other'; }))).sort();
     var chains = Array.from(new Set(DATA.rows.reduce(function (acc, r) { return acc.concat(r.chains || []); }, []))).sort();
@@ -290,7 +313,7 @@
       el('h2', { text: 'How implied value is computed' }),
       el('p', { class: 'sub', text: 'One function scores every row, from the snapshot figures alone. No protocol name is special-cased, and no row is hand-picked.' }),
       el('div', { class: 'formula' },
-        'implied = round( tvl_usd x category_ratio x (1 + clamp(change_7d, ' + m.growth_floor + ', ' + m.growth_cap + ') / 100 x ' + m.growth_weight + ') x (' + m.maturity_floor + ' + ' + m.maturity_range + ' x (1 - exp(-age_days / ' + m.maturity_tau_days + '))) x (1 + ' + m.breadth_step + ' x min(chains - 1, ' + m.breadth_max_extra_chains + ')) )'
+        'implied = round( tvl_usd x category_ratio x (1 + clamp(change_7d, ' + m.growth_floor + ', ' + m.growth_cap + ') / 100 x ' + m.growth_weight + ') x (' + m.maturity_floor + ' + ' + m.maturity_range + ' x (1 - exp(-age_days / ' + m.maturity_tau_days + '))) x (1 + ' + m.momentum_weight + ' x clamp((change_7d - category_median_growth) / 100, ' + m.momentum_floor + ', ' + m.momentum_cap + ')) x (1 + ' + m.breadth_step + ' x min(chains - 1, ' + m.breadth_max_extra_chains + ')) )'
       ),
       el('div', { class: 'ratios' }, DATA.ratios.map(function (r) {
         return el('div', null, el('span', { text: r.category + (r.used_category ? ' (' + r.comps + ' live comps)' : ' (global)') }), el('b', { text: 'x' + r.ratio.toFixed(3) }));
@@ -324,13 +347,22 @@
         el('div', null, el('span', { text: 'TVL' }), el('b', { class: 'num', text: fmtUsd(row.tvl_usd) })),
         el('div', null, el('span', { text: 'Category ratio (' + (row.ratio_comps >= DATA.model.min_category_comps ? row.ratio_comps + ' live comps' : 'global median') + ')' }), el('b', { class: 'num', text: 'x' + row.category_ratio.toFixed(3) })),
         el('div', null, el('span', { text: 'Seven-day growth' }), el('b', { class: 'num', text: fmtPct(row.change_7d) })),
+        el('div', null, el('span', { text: 'Category median growth (live)' }), el('b', { class: 'num', text: fmtPct(row.category_median_growth) })),
         el('div', null, el('span', { text: 'Age with no token' }), el('b', { class: 'num', text: fmtAge(row.age_days) })),
         el('div', null, el('span', { text: 'Growth multiplier' }), el('b', { class: 'num', text: String(row.growth_multiplier) })),
         el('div', null, el('span', { text: 'Maturity multiplier' }), el('b', { class: 'num', text: String(row.maturity_multiplier) })),
+        el('div', null, el('span', { text: 'Peer momentum multiplier' }), el('b', { class: 'num', text: String(row.momentum_multiplier) })),
         el('div', null, el('span', { text: 'Breadth multiplier (' + (row.chains || []).length + ' chains)' }), el('b', { class: 'num', text: String(row.breadth_multiplier) })),
         el('div', { class: 'total' }, el('span', { text: 'Implied value' }), el('b', { class: 'num', text: fmtUsd(row.implied_value_usd) }))
       ),
       el('p', { class: 'sub', text: 'Model ' + DATA.model_version + ': the page recomputes this row as ' + fmtUsd(recomputed) + (recomputed === row.implied_value_usd ? ', the same number board.json carries.' : ', which differs from the board: the data would be stale.') + ' This is an estimate, not a price, and not a prediction of whether or when a token is issued.' })
+    ));
+    var whyStep = steps[3] || '';
+    var whyAt = whyStep.indexOf(' Cost: ');
+    var whyText = whyAt >= 0 ? whyStep.slice(0, whyAt) : whyStep;
+    dialog.appendChild(el('section', { class: 'detail-section' },
+      el('h3', { text: 'Why this rank' }),
+      el('p', { class: 'why', text: whyText })
     ));
     dialog.appendChild(el('section', { class: 'detail-section' },
       el('h3', { text: 'Farm plan' }),
@@ -358,7 +390,7 @@
 
   function footer() {
     return el('footer', { class: 'foot' },
-      el('p', { text: 'Method: every row is one function of the snapshot\u2019s own figures (TVL, seven-day growth, age with no token, chains) and the live market\u2019s own market-cap / TVL ratios by category. The board ranks ' + DATA.board_size + ' genuine launch candidates; the watchlist\u2019s 40 are all in it.' }),
+      el('p', { text: 'Method: every row is one function of the snapshot\u2019s own figures (TVL, seven-day growth, age with no token, growth against its own category\u2019s live median, chains) and the live market\u2019s own market-cap / TVL ratios by category. The board ranks ' + DATA.board_size + ' genuine launch candidates; the watchlist\u2019s 40 are all in it.' }),
       el('p', { text: 'Implied value is this entry\u2019s own claim, never a price. It does not predict whether or when a token is issued.' })
     );
   }
@@ -369,6 +401,8 @@
     shell.appendChild(header());
     shell.appendChild(lede());
     shell.appendChild(spotlight());
+    var heat = heating();
+    if (heat) shell.appendChild(heat);
     shell.appendChild(controls());
     shell.appendChild(state.tab === 'pre-token' ? boardTable() : liveTable());
     if (state.tab === 'pre-token') shell.appendChild(modelPanel());

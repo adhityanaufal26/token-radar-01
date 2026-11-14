@@ -1,4 +1,4 @@
-// Token Radar v2 (radar-2): reads the sealed snapshot, scores every genuine launch
+// Token Radar v3 (radar-3): reads the sealed snapshot, scores every genuine launch
 // candidate with the model in lib/model.ts, writes the ranked board to /output/board.json,
 // writes the dashboard's data beside the page, copies dashboard/ and screenshots/ to
 // /output, and writes /output/dossier.json with the vendored make.fun library.
