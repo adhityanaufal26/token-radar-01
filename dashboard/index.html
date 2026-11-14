@@ -2,25 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Token Launch Radar</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Token Radar — pre-token protocols ranked by implied value</title>
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
-<header><h1>Token Launch Radar</h1><p id="tag">Pre-token protocols, ranked by what a launch would be worth — and how to farm each one.</p><p id="meta"></p></header>
-<main>
-<section id="spot" aria-label="Top five"></section>
-<section id="controls">
-<input id="q" type="search" placeholder="Search a protocol…" autocomplete="off">
-<select id="cat" aria-label="Category"></select>
-<select id="chain" aria-label="Chain"></select>
-<label class="wl"><input id="wl" type="checkbox"> Watchlist only</label>
-<span class="tabs"><button id="tab-pre" data-tab="pre">Pre-token</button><button id="tab-live" data-tab="live">Live tokens</button></span>
-</section>
-<section id="board"><p class="count"></p><table><thead id="head"></thead><tbody id="rows"></tbody></table></section>
-<section id="model" aria-label="How the radar works"></section>
-<footer><p>Implied values are this radar's own claim from the sealed snapshot, not a prediction that a token ships, or when. A protocol "records no token" when its DefiLlama record carries none — that record is not proof it has none.</p></footer>
-</main>
-<dialog class="detail"></dialog>
+<a class="skip" href="#board">Skip to the board</a>
+<div id="app" aria-busy="true"></div>
 <script src="../data.js"></script>
 <script src="app.js"></script>
 </body>
